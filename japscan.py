@@ -203,7 +203,7 @@ def download_manga(manga, books, chapters, output):
         if not os.path.exists(book_out):
             os.makedirs(book_out)
 
-        if c in mg.downloaded_chapters:
+        if c in mg.downloaded_chapters and not options.force:
             if options.verbose:
                 print "Chapter {0} has already been downloaded, discarding!".format(c)
             continue
@@ -234,6 +234,9 @@ parser = OptionParser()
 parser.add_option("-v", "--verbose", dest="verbose",
                   action="store_true", default=False,
                   help="add extra debugging information")
+parser.add_option("-f", "--force", dest="force",
+                  action="store_true", default=False,
+                  help="force download even if already downloaded")
 parser.add_option("-i", "--info", dest="info",
                   action="store_true", default=False,
                   help="display info on specified manga and exit with grace")
