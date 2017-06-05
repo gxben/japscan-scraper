@@ -149,6 +149,9 @@ def chapter_to_pdf(out, chapter, pages):
     pdfjoin = sh.pdfjoin.bake(_tty_out=True)
     log = pdfjoin('-o', pdf_path, '--landscape', '--rotateoversize', 'false', jpgs).stdout.strip()
 
+def clear_temporary_files(out):
+    shutil.rmtree(out)
+
 def get_manga(manga, title):
     for m in scrapped_mangas:
         if manga == m.manga:
@@ -216,6 +219,7 @@ def download_manga(manga, books, chapters, output):
         chapter_to_pdf(book_out, c, pages)
         mg.downloaded_chapters.add(c)
         pickle.dump(scrapped_mangas, get_db_cache(False))
+        clear_temporary_files(chapter_out)
 
 ####################
 # main entry point #
