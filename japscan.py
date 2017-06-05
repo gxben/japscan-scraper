@@ -7,11 +7,25 @@ import requests
 import pickle
 from bs4 import BeautifulSoup
 from optparse import OptionParser
+import pickle
 
 SITE = "http://www.japscan.com"
 SITE_TITLE_NO_SUCH_MANGA = "Les Meilleurs Mangas Japonais En Lecture En Ligne | JapScan.Com"
 SITE_TITLE_HEADER = "Lecture En Ligne Des Chapitres"
 DB_CACHE = ".japscanrc"
+
+class Manga:
+    def __init__(self, manga, title):
+        self.manga = manga
+        self.title = title
+        self.downloaded_chapters = set()
+    def __str__(self):
+        return "Manga: {0}, Title: {1}, Downloaded Chapters: {2}".format(self.manga, self.title, self.downloaded_chapters)
+
+def get_db_cache(read=True):
+    home = os.getenv("HOME")
+    db = "{0}/{1}".format(home, DB_CACHE)
+    return open(db, 'rb' if read else 'wb')
 
 def get_chapter_pages (manga, chapter):
     chapter_url = "{0}/lecture-en-ligne/{1}/{2}".format(SITE, manga, chapter)
@@ -139,9 +153,19 @@ def chapter_to_pdf(out, chapter, pages):
     pdfjoin = sh.pdfjoin.bake(_tty_out=True)
     log = pdfjoin('-o', pdf_path, '--landscape', '--rotateoversize', 'false', jpgs).stdout.strip()
 
+def get_manga(manga, title):
+    for m in scrapped_mangas:
+        if manga == m.manga:
+            return m
+    m = Manga(manga, title)
+    scrapped_mangas.append(m)
+    return m
+
 def download_manga(manga, books, chapters, output):
     html, title = get_manga_html(manga)
     vdict, vlist, last_chapter = get_volumes_and_chapters(html)
+
+    mg = get_manga(manga, title)
 
     # if specified, prefer books/volumes over individual chapters
     # if none is specified, download everything
@@ -189,6 +213,8 @@ def download_manga(manga, books, chapters, output):
 
         pages = download_chapter(manga, chapter_out, c)
         chapter_to_pdf(book_out, c, pages)
+        mg.downloaded_chapters.add(c)
+        pickle.dump(scrapped_mangas, get_db_cache(False))
 
 ####################
 # main entry point #
@@ -236,6 +262,13 @@ elif options.manga:
         sys.exit(0)
     else:
         print 'Scraping on {} ...'.format(options.manga)
+
+        try:
+            fdb = get_db_cache(True)
+            scrapped_mangas = pickle.load(fdb)
+        except:
+            scrapped_mangas = []
+        print scrapped_mangas
         download_manga(options.manga, options.books, options.chapters, options.output)
         sys.exit(0)
 else:
