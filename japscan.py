@@ -12,7 +12,6 @@ SITE = "http://www.japscan.com"
 SITE_TITLE_NO_SUCH_MANGA = "Les Meilleurs Mangas Japonais En Lecture En Ligne | JapScan.Com"
 SITE_TITLE_HEADER = "Lecture En Ligne Des Chapitres"
 DB_CACHE = ".japscanrc"
-OUTPUT = "output"
 
 def get_chapter_pages (manga, chapter):
     chapter_url = "{0}/lecture-en-ligne/{1}/{2}".format(SITE, manga, chapter)
@@ -46,15 +45,14 @@ def get_manga_html(manga):
     title = title[len(SITE_TITLE_HEADER) + 1:].split('|')[0].strip()
     return soup, title
 
-def get_manga_info(manga):
-    soup, title = get_manga_html(manga)
-    chapters = soup.find(id="liste_chapitres")
+def get_volumes_and_chapters(html):
+    chapters = html.find(id="liste_chapitres")
 
     vdict = {}
     if options.verbose: print "Retrieving volumes list ..."
     volumes = chapters.find_all('h2')
     vlist = []
-    vlist.append("Unreleased")
+    vlist.append("Volume Unreleased")
     for v in volumes: vlist.append(v.string)
     if options.verbose:
         print "Retrieving chapters list ..."
@@ -69,10 +67,122 @@ def get_manga_info(manga):
             chaps.append(cha)
         vdict[vlist[i]] = chaps
         i += 1
+    return vdict, vlist, last_chapter
+
+
+def get_manga_info(manga):
+    html, title = get_manga_html(manga)
+    vdict, vlist, last_chapter = get_volumes_and_chapters(html)
 
     print "{0} has the following {1} volumes, totalizing {2} chapters".format(title, len(vlist), last_chapter)
     for v in vlist:
         print " - {0}".format(v)
+
+def parse_range_options(opt):
+    if ',' in opt:
+        v = opt.split(',')
+        return v
+    elif '-' in opt:
+        v = opt.split('-')
+        r = range(int(v[0]), int(v[-1])+1)
+        return r
+    return [int(opt)]
+
+def find_book_by_chapter(vd, c):
+    for k in vd.keys():
+        if str(c) in vd[k]:
+            return k
+    return "Unknown"
+
+def download_chapter(manga, out, chapter):
+    pages = get_chapter_pages (manga, chapter)
+    print pages
+
+    # Saving images
+    for p in pages:
+        img_nr = p.split('.')[0]
+        img_path = "{0}/{1}.jpg".format(out, img_nr)
+        if os.path.exists(img_path):
+            continue
+
+        img = get_page_image(manga, chapter, p)
+        if options.verbose:
+            print "Downloading image from {0}".format(img)
+
+        file = requests.get(img, stream=True)
+        with open(img_path, 'wb') as out_file:
+            shutil.copyfileobj(file.raw, out_file)
+        del file
+        if options.verbose:
+            print "  saved to {}".format(img_path)
+    return pages
+
+def chapter_to_pdf(out, chapter, pages):
+    pdf_path = "{0}/{1}.pdf".format(out, chapter)
+    if os.path.exists(pdf_path):
+        return
+
+    if options.verbose:
+        print "Saving chapter {0} to {1}".format(chapter, pdf_path)
+
+    jpgs = []
+    for p in pages:
+        img_nr = p.split('.')[0]
+        jpgs.append('{0}/{1}.jpg'.format(out, img_nr))
+
+    pdfjoin = sh.pdfjoin.bake(_tty_out=True)
+    log = pdfjoin('-o', pdf_path, '--landscape', '--rotateoversize', 'false', jpgs).stdout.strip()
+
+def download_manga(manga, books, chapters, output):
+    html, title = get_manga_html(manga)
+    vdict, vlist, last_chapter = get_volumes_and_chapters(html)
+
+    # if specified, prefer books/volumes over individual chapters
+    # if none is specified, download everything
+    chapters_to_fetch = []
+    if books:
+        volumes = parse_range_options(books)
+        if options.verbose:
+            print "Volumes to be retrieved:", volumes
+        for v in volumes:
+            for k in vdict.keys():
+                volume_nr = k.split(':')[0][len("Volume "):-1]
+                if str(volume_nr) == str(v):
+                    if options.verbose:
+                        print "Found maching book:", k
+                    chapters_to_fetch += vdict[k]
+    elif chapters:
+        chap = parse_range_options(chapters)
+        chapters_to_fetch += chap
+    else:
+        for k in vdict.keys():
+            chapters_to_fetch += vdict[k]
+
+    chapters_to_fetch = sorted(chapters_to_fetch)
+    if options.verbose:
+        print "Chapters to be retrieved:", chapters_to_fetch
+
+    # Create output dir
+    base_out = "{0}/{1}".format(output, title)
+    if not os.path.exists(base_out):
+        os.makedirs(base_out)
+
+    for c in chapters_to_fetch:
+        book = find_book_by_chapter(vdict, c)
+        print book
+        book_out = "{0}/{1}".format(base_out, book)
+        if not os.path.exists(book_out):
+            os.makedirs(book_out)
+
+        if options.verbose:
+            print "Retrieving pages from chapter {0} ...".format(c)
+
+        chapter_out = "{0}/{1}".format(book_out, c)
+        if not os.path.exists(chapter_out):
+            os.makedirs(chapter_out)
+
+        pages = download_chapter(manga, chapter_out, c)
+        chapter_to_pdf(book_out, c, pages)
 
 ####################
 # main entry point #
@@ -99,6 +209,9 @@ parser.add_option("-m", "--manga", dest="manga",
 parser.add_option("-b", "--books", dest="books",
                   action="store", default="",
                   help="books to be retrieved (default all)")
+parser.add_option("-o", "--output", dest="output",
+                  action="store", default="output",
+                  help="manga to be scraped")
 parser.add_option("-c", "--chapters", dest="chapters",
                   action="store", default="",
                   help="chapters to be retrieved (default all)")
@@ -117,99 +230,8 @@ elif options.manga:
         sys.exit(0)
     else:
         print 'Scraping on {} ...'.format(options.manga)
-        retrieve_manga(options.manga, options.books, options.chapters)
+        download_manga(options.manga, options.books, options.chapters, options.output)
         sys.exit(0)
 else:
     print parser.print_help()
     sys.exit(1)
-
-# manga = options.manga
-# print "Looking for {0} ...".format(manga)
-
-# manga_url = "{0}/mangas/{1}/".format(SITE, manga)
-# print manga_url
-# r = requests.get(manga_url)
-
-# soup = BeautifulSoup(r.text, "html.parser")
-# title = soup.title.string
-# if title == "Liste Des Mangas En Lecture En Ligne":
-#     print "Manga {0} can't be found ! Aborting".format(manga)
-#     sys.exit(1)
-
-# chapters = soup.find(id="liste_chapitres")
-
-# vdict = {}
-# print "Retrieving volumes list ..."
-# volumes = chapters.find_all('h2')
-# vlist = []
-# vlist.append("Unreleased")
-# for v in volumes:
-#     vlist.append(v.string)
-# print vlist
-# print "Retrieving chapters list ..."
-# i = 0
-# ul = chapters.find_all('ul')
-# for c in ul:
-#     chaps = []
-#     for ch in c.find_all('a'):
-#         chaps.append(ch.get('href').split('/')[-2])
-#     print chaps
-#     vdict[vlist[i]] = chaps
-#     i += 1
-
-# # print vdict
-
-# # Create output dir
-# output = "{0}/{1}".format(OUTPUT, manga)
-# if not os.path.exists(output):
-#     os.makedirs(output)
-
-# for v in vlist:
-#     vout = "{0}/{1}".format(output, v)
-#     if not os.path.exists(vout):
-#         os.makedirs(vout)
-
-#     # Saving volumes
-#     print "Retrieving pages from {0} ...".format(v)
-#     ch = vdict[v]
-#     for c in ch:
-#         print " - Retrieving pages from chapter {0}".format(c)
-
-#         cout = "{0}/{1}/{2}".format(output, v, c)
-#         if not os.path.exists(cout):
-#             os.makedirs(cout)
-
-#         pages = get_chapter_pages (manga, c)
-#         print pages
-
-#         # Saving images
-#         for p in pages:
-#             img_nr = p.split('.')[0]
-#             img_path = "{0}/{1}/{2}/{3}".format(output, v, c, "{0}.jpg".format(img_nr))
-
-#             if os.path.exists(img_path):
-#                 continue
-
-#             img = get_page_image(manga, c, p)
-#             print "  + Downloading image from {0}".format(img)
-
-#             file = requests.get(img, stream=True)
-#             with open(img_path, 'wb') as out_file:
-#                 shutil.copyfileobj(file.raw, out_file)
-#             del file
-
-#         # Saving chapter PDF
-#         pdf_path = "{0}/{1}/{2}/{2}.pdf".format(output, v, c)
-#         if not os.path.exists(pdf_path):
-#             print "  + Saving chapter to {0}".format(pdf_path)
-
-#             jpgs = []
-#             for p in pages:
-#                 img_nr = p.split('.')[0]
-#                 jpgs.append('{0}/{1}/{2}/{3}.jpg'.format(output, v, c, img_nr))
-
-#             pdfjoin = sh.pdfjoin.bake(_tty_out=True)
-#             log = pdfjoin('-o', pdf_path, '--landscape', '--rotateoversize', 'false', jpgs).stdout.strip()
-
-#     # Saving volume to PDF
-#     print "..."
