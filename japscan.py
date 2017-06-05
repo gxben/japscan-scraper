@@ -28,7 +28,8 @@ def get_page_image (manga, chapter, page):
     r = requests.get(page_url)
     soup = BeautifulSoup(r.text, "html.parser")
     src = soup.find(id='image').get('src')
-    print src
+    if "__Add__" in src: # dummy image, discard
+        return None
     return src
 
 def get_manga_html(manga):
@@ -98,6 +99,7 @@ def download_chapter(manga, out, chapter):
     pages = get_chapter_pages (manga, chapter)
 
     # Saving images
+    real_pages = []
     for p in pages:
         img_nr = p.split('.')[0]
         img_path = "{0}/{1}.jpg".format(out, img_nr)
@@ -105,6 +107,9 @@ def download_chapter(manga, out, chapter):
             continue
 
         img = get_page_image(manga, chapter, p)
+        if img is None:
+            continue
+
         if options.verbose:
             print "Downloading image from {0}".format(img)
 
@@ -114,7 +119,9 @@ def download_chapter(manga, out, chapter):
         del file
         if options.verbose:
             print "  saved to {}".format(img_path)
-    return pages
+        real_pages.append(p)
+
+    return real_pages
 
 def chapter_to_pdf(out, chapter, pages):
     pdf_path = "{0}/{1}.pdf".format(out, chapter)
