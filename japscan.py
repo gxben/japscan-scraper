@@ -96,7 +96,6 @@ def find_book_by_chapter(vd, c):
 
 def download_chapter(manga, out, chapter):
     pages = get_chapter_pages (manga, chapter)
-    print pages
 
     # Saving images
     for p in pages:
@@ -128,7 +127,7 @@ def chapter_to_pdf(out, chapter, pages):
     jpgs = []
     for p in pages:
         img_nr = p.split('.')[0]
-        jpgs.append('{0}/{1}.jpg'.format(out, img_nr))
+        jpgs.append('{0}/{1}/{2}.jpg'.format(out, chapter, img_nr))
 
     pdfjoin = sh.pdfjoin.bake(_tty_out=True)
     log = pdfjoin('-o', pdf_path, '--landscape', '--rotateoversize', 'false', jpgs).stdout.strip()
