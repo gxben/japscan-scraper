@@ -1,2 +1,2 @@
 # japscan-scraper
-Scrap Manags from www.japscan.com
+Scrap Mangas from www.japscan.com
