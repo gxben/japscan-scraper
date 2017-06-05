@@ -117,8 +117,6 @@ def download_chapter(manga, out, chapter):
     for p in pages:
         img_nr = p.split('.')[0]
         img_path = "{0}/{1}.jpg".format(out, img_nr)
-        if os.path.exists(img_path):
-            continue
 
         img = get_page_image(manga, chapter, p)
         if img is None:
@@ -139,8 +137,6 @@ def download_chapter(manga, out, chapter):
 
 def chapter_to_pdf(out, chapter, pages):
     pdf_path = "{0}/{1}.pdf".format(out, chapter)
-    if os.path.exists(pdf_path):
-        return
 
     if options.verbose:
         print "Saving chapter {0} to {1}".format(chapter, pdf_path)
@@ -203,6 +199,11 @@ def download_manga(manga, books, chapters, output):
         book_out = "{0}/{1}".format(base_out, book)
         if not os.path.exists(book_out):
             os.makedirs(book_out)
+
+        if c in mg.downloaded_chapters:
+            if options.verbose:
+                print "Chapter {0} has already been downloaded, discarding!".format(c)
+            continue
 
         if options.verbose:
             print "Retrieving pages from chapter {0} ...".format(c)
