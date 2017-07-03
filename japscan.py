@@ -42,7 +42,8 @@ def get_page_image (manga, chapter, page):
     r = requests.get(page_url)
     soup = BeautifulSoup(r.text, "html.parser")
     src = soup.find(id='image').get('src')
-    if "__Add__" in src: # dummy image, discard
+    #print src
+    if "__Add__" in src or "IMG__" in src: # dummy image, discard
         return None
     return src
 
