@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from optparse import OptionParser
 import pickle
 
-SITE = "http://www.japscan.com"
+SITE = "http://www.japscan.cc"
 SITE_TITLE_NO_SUCH_MANGA = "Les Meilleurs Mangas Japonais En Lecture En Ligne | JapScan.Com"
 SITE_TITLE_HEADER = "Lecture En Ligne Des Chapitres"
 DB_CACHE = ".japscanrc"
@@ -41,8 +41,12 @@ def get_page_image (manga, chapter, page):
     page_url = "{0}/lecture-en-ligne/{1}/{2}/{3}".format(SITE, manga, chapter, page)
     r = requests.get(page_url)
     soup = BeautifulSoup(r.text, "html.parser")
-    src = soup.find(id='image').get('src')
-    #print src
+    img  = soup.find(id='image')
+    if img is None:
+        return None
+    src = img.get('src')
+    if src is None:
+        return None
     if "__Add__" in src or "IMG__" in src: # dummy image, discard
         return None
     return src
@@ -277,7 +281,7 @@ elif options.manga:
             scrapped_mangas = pickle.load(fdb)
         except:
             scrapped_mangas = []
-        print scrapped_mangas
+        #print scrapped_mangas
         download_manga(options.manga, options.books, options.chapters, options.output)
         sys.exit(0)
 else:
